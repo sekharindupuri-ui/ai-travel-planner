@@ -5,7 +5,6 @@ import os
 
 from config import TAVILY_API_KEY
 
-# Ensure env var is set for the SDK
 os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 
 try:
@@ -17,14 +16,14 @@ except Exception:
 
 
 def get_tavily_tool_name() -> str:
-    """Get the actual registered tool name, which varies by library version."""
     return tavily_search.name
 
 
-def run_tavily_search(query: str) -> str:
-    """Run a Tavily web search and return formatted results."""
+def run_tavily_search(query: str, usage_tracker=None) -> str:
     try:
         results = tavily_search.invoke(query)
+        if usage_tracker:
+            usage_tracker.log_tavily("Itinerary", detail=query[:50])
         if isinstance(results, str):
             return results
         return json.dumps(results, indent=2)

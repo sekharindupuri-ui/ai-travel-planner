@@ -1,7 +1,5 @@
 """Itinerary agent — plans trips using Tavily search + LLM reasoning."""
 
-import json
-
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
@@ -31,32 +29,30 @@ Use the ReAct approach:
 
 
 def build_itinerary_agent(llm):
-    """Create the itinerary agent chain with Tavily tool bound."""
     tools = [tavily_search]
     llm_with_tools = llm.bind_tools(tools)
     return ITINERARY_PROMPT | llm_with_tools, tools
 
 
-def run_itinerary_agent(llm, messages: list) -> AIMessage:
-    """Run the itinerary agent, handling tool calls if needed."""
+def run_itinerary_agent(llm, messages: list, usage_tracker=None) -> AIMessage:
     agent_chain, tools = build_itinerary_agent(llm)
 
     try:
         response = agent_chain.invoke({"messages": messages})
+        if usage_tracker:
+            usage_tracker.log_gemini("Itinerary", detail="initial response")
     except Exception as e:
         return AIMessage(content=f"I encountered an error while planning: {e}")
 
-    # Handle tool calls (ReAct loop — one round)
     if hasattr(response, "tool_calls") and response.tool_calls:
         tool_messages = []
         tavily_name = get_tavily_tool_name()
 
         for tc in response.tool_calls:
-            # Match by the actual registered tool name (varies by version)
             if tc["name"] == tavily_name:
                 try:
                     query = tc["args"].get("query", tc["args"].get("input", ""))
-                    result = run_tavily_search(query)
+                    result = run_tavily_search(query, usage_tracker=usage_tracker)
                 except Exception as e:
                     result = f"Search failed: {e}"
                 tool_messages.append(
@@ -67,10 +63,11 @@ def run_itinerary_agent(llm, messages: list) -> AIMessage:
             full_messages = messages + [response] + tool_messages
             try:
                 response = agent_chain.invoke({"messages": full_messages})
+                if usage_tracker:
+                    usage_tracker.log_gemini("Itinerary", detail="with search results")
             except Exception as e:
                 return AIMessage(content=f"Error processing search results: {e}")
 
-    # Ensure we always return an AIMessage
     if isinstance(response, AIMessage):
         return response
     return AIMessage(content=str(response.content) if hasattr(response, "content") else str(response))

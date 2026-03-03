@@ -17,9 +17,8 @@ def search_hotels(
     rooms: int = 1,
     hotel_class: Optional[str] = None,
     sort_by: int = 8,
+    usage_tracker=None,
 ) -> str:
-    """Search for hotels and return formatted results."""
-
     params = {
         "api_key": SERPAPI_API_KEY,
         "engine": "google_hotels",
@@ -39,8 +38,10 @@ def search_hotels(
 
     try:
         results = GoogleSearch(params).get_dict()
-        properties = results.get("properties", [])
+        if usage_tracker:
+            usage_tracker.log_serpapi("Hotel", detail=f"{location} {check_in_date}")
 
+        properties = results.get("properties", [])
         if not properties:
             return f"No hotels found in {location} for those dates."
 

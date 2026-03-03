@@ -51,7 +51,6 @@ AIRPORT_CODES: dict[str, str] = {
 
 
 def normalize_airport(name: str) -> str:
-    """Convert city names to IATA codes; pass through if already a code."""
     if not name:
         return name
     cleaned = name.strip().lower()
@@ -59,12 +58,10 @@ def normalize_airport(name: str) -> str:
 
 
 def normalize_date(date_str: str) -> str:
-    """Convert various date formats to YYYY-MM-DD."""
     if not date_str:
         return date_str
     try:
         from dateutil import parser as date_parser
-
         return date_parser.parse(date_str).strftime("%Y-%m-%d")
     except Exception:
         return date_str
@@ -77,9 +74,8 @@ def search_flights(
     return_date: Optional[str] = None,
     adults: int = 1,
     children: int = 0,
+    usage_tracker=None,
 ) -> str:
-    """Search for flights and return formatted results."""
-
     dep = normalize_airport(departure_airport)
     arr = normalize_airport(arrival_airport)
     out_date = normalize_date(outbound_date)
@@ -100,8 +96,10 @@ def search_flights(
 
     try:
         results = GoogleSearch(params).get_dict()
-        flights = results.get("best_flights") or results.get("other_flights", [])
+        if usage_tracker:
+            usage_tracker.log_serpapi("Flight", detail=f"{dep}→{arr} {out_date}")
 
+        flights = results.get("best_flights") or results.get("other_flights", [])
         if not flights:
             return f"No flights found from {dep} to {arr} on {out_date}."
 
@@ -118,7 +116,6 @@ def search_flights(
             travel_class = leg.get("travel_class", "Economy")
             stops = len(f.get("flights", [])) - 1
             stop_label = "Direct" if stops == 0 else f"{stops} stop(s)"
-
             lines.append(
                 f"**{airline}** ({travel_class}) — **${price}** | {duration} min | {stop_label}\n"
                 f"  {dep_name} ({dep_time}) → {arr_name} ({arr_time})"

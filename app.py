@@ -3,6 +3,7 @@ AI Travel Planner — Streamlit Chat Interface
 
 A multi-agent travel assistant powered by LangGraph + Gemini.
 Agents: Flight booking, Hotel search, Itinerary planning.
+Built by Sekhar Indupuri.
 """
 
 import uuid
@@ -13,20 +14,16 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from auth.login import check_password
 from agents.graph import build_graph
+from usage import UsageTracker
 
 
 def extract_text(message) -> str:
     """Extract plain text from a message, handling various content formats."""
     if not hasattr(message, "content"):
         return str(message)
-
     content = message.content
-
-    # Simple string — return as-is
     if isinstance(content, str):
         return content
-
-    # List of content blocks (Gemini format) — extract text parts
     if isinstance(content, list):
         parts = []
         for block in content:
@@ -35,7 +32,6 @@ def extract_text(message) -> str:
             elif isinstance(block, str):
                 parts.append(block)
         return "\n".join(parts) if parts else str(content)
-
     return str(content)
 
 
@@ -55,6 +51,8 @@ if "thread_id" not in st.session_state:
     st.session_state.thread_id = str(uuid.uuid4())
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "usage_tracker" not in st.session_state:
+    st.session_state.usage_tracker = UsageTracker()
 if "graph" not in st.session_state:
     try:
         st.session_state.graph = build_graph()
@@ -64,6 +62,7 @@ if "graph" not in st.session_state:
         st.stop()
 
 graph = st.session_state.graph
+tracker = st.session_state.usage_tracker
 
 # ---- Header ----
 st.title("✈️ AI Travel Planner")
@@ -91,13 +90,45 @@ This app uses **3 specialized AI agents** coordinated by a router:
 
     st.divider()
 
+    # ---- Usage Dashboard ----
+    st.header("📊 Usage (this session)")
+
+    col1, col2 = st.columns(2)
+    col1.metric("Total API Calls", tracker.total_calls)
+    col2.metric("Est. Cost", f"${tracker.estimated_cost:.4f}")
+
+    col3, col4, col5 = st.columns(3)
+    col3.metric("Gemini", tracker.gemini_calls)
+    col4.metric("SerpAPI", tracker.serpapi_calls)
+    col5.metric("Tavily", tracker.tavily_calls)
+
+    if tracker.api_calls:
+        with st.expander("📋 Call Log", expanded=False):
+            for call in reversed(tracker.api_calls[-20:]):
+                st.text(f"{call.timestamp} | {call.service:8s} | {call.agent:10s} | {call.detail}")
+
+    st.divider()
+
     if st.button("🗑️ Clear conversation"):
         st.session_state.messages = []
         st.session_state.thread_id = str(uuid.uuid4())
+        st.session_state.usage_tracker = UsageTracker()
         st.rerun()
 
     st.divider()
     st.caption(f"Session: `{st.session_state.thread_id[:8]}…`")
+
+    # ---- Footer with author name ----
+    st.divider()
+    st.markdown(
+        """
+        <div style="text-align: center; color: #888; font-size: 0.85em;">
+            Built by <strong>Sekhar Indupuri</strong><br>
+            Multi-Agent System • 2026
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ---- Chat history display ----
 for msg in st.session_state.messages:
@@ -107,13 +138,11 @@ for msg in st.session_state.messages:
 
 # ---- Chat input ----
 if prompt := st.chat_input("Where would you like to go?"):
-    # Show user message
     user_msg = HumanMessage(content=prompt)
     st.session_state.messages.append(user_msg)
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Run the graph
     with st.chat_message("assistant"):
         with st.spinner("Thinking…"):
             try:
@@ -129,7 +158,6 @@ if prompt := st.chat_input("Where would you like to go?"):
                     },
                 )
 
-                # Get the last AI message from the result
                 response_messages = result.get("messages", [])
                 ai_response = None
                 for m in reversed(response_messages):
@@ -141,12 +169,10 @@ if prompt := st.chat_input("Where would you like to go?"):
                     text = extract_text(ai_response)
                     if text:
                         st.markdown(text)
-                        # Store a clean version in session
                         st.session_state.messages.append(AIMessage(content=text))
                     else:
                         st.warning("The agent returned an empty response. Please try again.")
                 else:
-                    # Fallback: try to find any message with content
                     for m in reversed(response_messages):
                         text = extract_text(m)
                         if text and not isinstance(m, HumanMessage):

@@ -1,6 +1,5 @@
 """Flight agent — extracts structured params from user query, then searches."""
 
-import json
 from datetime import date
 from typing import Optional
 
@@ -46,19 +45,20 @@ All dates MUST be in YYYY-MM-DD format. No extra text — just the JSON.""",
 
 
 def build_flight_chain(llm):
-    """Return a chain that extracts FlightParams from a query."""
     parser = PydanticOutputParser(pydantic_object=FlightParams)
     return EXTRACTION_PROMPT | llm | parser
 
 
-def run_flight_agent(llm, user_query: str) -> AIMessage:
-    """Full flight agent: extract params → search → return AIMessage."""
+def run_flight_agent(llm, user_query: str, usage_tracker=None) -> AIMessage:
     try:
         chain = build_flight_chain(llm)
         params: FlightParams = chain.invoke({
             "query": user_query,
             "today": date.today().isoformat(),
         })
+        if usage_tracker:
+            usage_tracker.log_gemini("Flight", detail="param extraction")
+
         result = search_flights(
             departure_airport=params.departure_airport,
             arrival_airport=params.arrival_airport,
@@ -66,6 +66,7 @@ def run_flight_agent(llm, user_query: str) -> AIMessage:
             return_date=params.return_date,
             adults=params.adults,
             children=params.children,
+            usage_tracker=usage_tracker,
         )
     except Exception as e:
         result = f"Sorry, I couldn't process that flight request: {e}"

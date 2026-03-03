@@ -15,19 +15,16 @@ from agents.flight import run_flight_agent
 from agents.hotel import run_hotel_agent
 from agents.itinerary import run_itinerary_agent
 
-# Ensure all env vars are set for SDKs that read them directly
 os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
 os.environ["SERPAPI_API_KEY"] = SERPAPI_API_KEY
 os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 
 
-# ---- State schema ----
 class TravelState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     next_agent: Optional[str]
 
 
-# ---- Shared LLM instance ----
 def get_llm():
     return ChatGoogleGenerativeAI(
         model=GEMINI_MODEL,
@@ -35,9 +32,7 @@ def get_llm():
     )
 
 
-# ---- Node functions ----
 def router_node(state: TravelState) -> dict:
-    """Classify the query and decide which agent handles it."""
     llm = get_llm()
     user_msg = state["messages"][-1].content
     chain = build_router_chain(llm)
@@ -53,31 +48,47 @@ def router_node(state: TravelState) -> dict:
 def flight_node(state: TravelState) -> dict:
     llm = get_llm()
     user_query = state["messages"][-1].content
-    response = run_flight_agent(llm, user_query)
+    # Get usage tracker from Streamlit session state
+    usage_tracker = _get_usage_tracker()
+    if usage_tracker:
+        usage_tracker.log_gemini("Router", detail="query classification")
+    response = run_flight_agent(llm, user_query, usage_tracker=usage_tracker)
     return {"messages": [response]}
 
 
 def hotel_node(state: TravelState) -> dict:
     llm = get_llm()
     user_query = state["messages"][-1].content
-    response = run_hotel_agent(llm, user_query)
+    usage_tracker = _get_usage_tracker()
+    if usage_tracker:
+        usage_tracker.log_gemini("Router", detail="query classification")
+    response = run_hotel_agent(llm, user_query, usage_tracker=usage_tracker)
     return {"messages": [response]}
 
 
 def itinerary_node(state: TravelState) -> dict:
     llm = get_llm()
-    response = run_itinerary_agent(llm, state["messages"])
+    usage_tracker = _get_usage_tracker()
+    if usage_tracker:
+        usage_tracker.log_gemini("Router", detail="query classification")
+    response = run_itinerary_agent(llm, state["messages"], usage_tracker=usage_tracker)
     return {"messages": [response]}
 
 
-# ---- Conditional edge ----
+def _get_usage_tracker():
+    """Safely get usage tracker from Streamlit session state."""
+    try:
+        import streamlit as st
+        return st.session_state.get("usage_tracker")
+    except Exception:
+        return None
+
+
 def pick_agent(state: TravelState) -> Literal["flight_agent", "hotel_agent", "itinerary_agent"]:
     return state.get("next_agent", "itinerary_agent")
 
 
-# ---- Build graph ----
 def build_graph():
-    """Construct and compile the LangGraph travel planner."""
     wf = StateGraph(TravelState)
 
     wf.add_node("router", router_node)

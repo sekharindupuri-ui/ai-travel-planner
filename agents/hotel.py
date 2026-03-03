@@ -1,6 +1,5 @@
 """Hotel agent — extracts structured params from user query, then searches."""
 
-import json
 from datetime import date
 from typing import Optional
 
@@ -50,19 +49,20 @@ No extra text — just the JSON.""",
 
 
 def build_hotel_chain(llm):
-    """Return a chain that extracts HotelParams from a query."""
     parser = PydanticOutputParser(pydantic_object=HotelParams)
     return EXTRACTION_PROMPT | llm | parser
 
 
-def run_hotel_agent(llm, user_query: str) -> AIMessage:
-    """Full hotel agent: extract params → search → return AIMessage."""
+def run_hotel_agent(llm, user_query: str, usage_tracker=None) -> AIMessage:
     try:
         chain = build_hotel_chain(llm)
         params: HotelParams = chain.invoke({
             "query": user_query,
             "today": date.today().isoformat(),
         })
+        if usage_tracker:
+            usage_tracker.log_gemini("Hotel", detail="param extraction")
+
         result = search_hotels(
             location=params.location,
             check_in_date=params.check_in_date,
@@ -71,6 +71,7 @@ def run_hotel_agent(llm, user_query: str) -> AIMessage:
             children=params.children,
             rooms=params.rooms,
             hotel_class=params.hotel_class,
+            usage_tracker=usage_tracker,
         )
     except Exception as e:
         result = f"Sorry, I couldn't process that hotel request: {e}"
