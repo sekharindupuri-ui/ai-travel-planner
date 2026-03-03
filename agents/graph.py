@@ -9,14 +9,16 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, StateGraph
 
-from config import GEMINI_MODEL, GEMINI_TEMPERATURE, GOOGLE_API_KEY
+from config import GEMINI_MODEL, GEMINI_TEMPERATURE, GOOGLE_API_KEY, SERPAPI_API_KEY, TAVILY_API_KEY
 from agents.router import build_router_chain, resolve_route
 from agents.flight import run_flight_agent
 from agents.hotel import run_hotel_agent
 from agents.itinerary import run_itinerary_agent
 
-# Ensure env var is set for the Google SDK
+# Ensure all env vars are set for SDKs that read them directly
 os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+os.environ["SERPAPI_API_KEY"] = SERPAPI_API_KEY
+os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 
 
 # ---- State schema ----
@@ -42,7 +44,8 @@ def router_node(state: TravelState) -> dict:
     try:
         decision = chain.invoke({"query": user_msg})
         next_agent = resolve_route(decision)
-    except Exception:
+    except Exception as e:
+        print(f"Router error: {e}")
         next_agent = "itinerary_agent"
     return {"next_agent": next_agent}
 

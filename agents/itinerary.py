@@ -4,9 +4,8 @@ import json
 
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.tools import Tool
 
-from tools.search import run_tavily_search, tavily_search
+from tools.search import run_tavily_search, tavily_search, get_tavily_tool_name
 
 ITINERARY_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -42,15 +41,22 @@ def run_itinerary_agent(llm, messages: list) -> AIMessage:
     """Run the itinerary agent, handling tool calls if needed."""
     agent_chain, tools = build_itinerary_agent(llm)
 
-    response = agent_chain.invoke({"messages": messages})
+    try:
+        response = agent_chain.invoke({"messages": messages})
+    except Exception as e:
+        return AIMessage(content=f"I encountered an error while planning: {e}")
 
     # Handle tool calls (ReAct loop — one round)
     if hasattr(response, "tool_calls") and response.tool_calls:
         tool_messages = []
+        tavily_name = get_tavily_tool_name()
+
         for tc in response.tool_calls:
-            if tc["name"] == "tavily_search_results_json":
+            # Match by the actual registered tool name (varies by version)
+            if tc["name"] == tavily_name:
                 try:
-                    result = run_tavily_search(tc["args"].get("query", ""))
+                    query = tc["args"].get("query", tc["args"].get("input", ""))
+                    result = run_tavily_search(query)
                 except Exception as e:
                     result = f"Search failed: {e}"
                 tool_messages.append(
@@ -59,6 +65,12 @@ def run_itinerary_agent(llm, messages: list) -> AIMessage:
 
         if tool_messages:
             full_messages = messages + [response] + tool_messages
-            response = agent_chain.invoke({"messages": full_messages})
+            try:
+                response = agent_chain.invoke({"messages": full_messages})
+            except Exception as e:
+                return AIMessage(content=f"Error processing search results: {e}")
 
-    return response
+    # Ensure we always return an AIMessage
+    if isinstance(response, AIMessage):
+        return response
+    return AIMessage(content=str(response.content) if hasattr(response, "content") else str(response))

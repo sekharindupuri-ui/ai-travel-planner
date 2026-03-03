@@ -6,6 +6,7 @@ Agents: Flight booking, Hotel search, Itinerary planning.
 """
 
 import uuid
+import traceback
 
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
@@ -30,7 +31,12 @@ if "thread_id" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "graph" not in st.session_state:
-    st.session_state.graph = build_graph()
+    try:
+        st.session_state.graph = build_graph()
+    except Exception as e:
+        st.error(f"Failed to initialize the travel planner: {e}")
+        st.code(traceback.format_exc())
+        st.stop()
 
 graph = st.session_state.graph
 
@@ -97,6 +103,7 @@ if prompt := st.chat_input("Where would you like to go?"):
                         }
                     },
                 )
+
                 # Get the last AI message from the result
                 response_messages = result.get("messages", [])
                 ai_response = None
@@ -105,12 +112,25 @@ if prompt := st.chat_input("Where would you like to go?"):
                         ai_response = m
                         break
 
-                if ai_response:
+                if ai_response and ai_response.content:
                     st.markdown(ai_response.content)
                     st.session_state.messages.append(ai_response)
                 else:
-                    st.warning("No response generated. Please try again.")
+                    # Debug: show what we actually got back
+                    msg_types = [type(m).__name__ for m in response_messages]
+                    st.warning(
+                        f"No response text generated. "
+                        f"Messages returned: {len(response_messages)} ({', '.join(msg_types)})"
+                    )
+                    # Try to show any content we got
+                    for m in response_messages:
+                        if hasattr(m, "content") and m.content:
+                            st.markdown(m.content)
+                            st.session_state.messages.append(
+                                AIMessage(content=m.content)
+                            )
+                            break
 
             except Exception as e:
                 st.error(f"Something went wrong: {e}")
-                st.caption("Try rephrasing your question or check the API keys in Settings.")
+                st.code(traceback.format_exc())
