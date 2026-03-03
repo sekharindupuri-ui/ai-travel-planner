@@ -1,6 +1,7 @@
 """Hotel agent — extracts structured params from user query, then searches."""
 
 import json
+from datetime import date
 from typing import Optional
 
 from langchain_core.messages import AIMessage
@@ -26,6 +27,9 @@ EXTRACTION_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             """Extract hotel search parameters from the user message.
+Today's date is {today}. Use this to resolve relative dates and assume the correct year.
+If the user says "March 8" without a year, assume the nearest future March 8 from today.
+
 Return ONLY a JSON object:
 {{
   "location": "city or area name",
@@ -36,6 +40,7 @@ Return ONLY a JSON object:
   "rooms": 1,
   "hotel_class": null
 }}
+All dates MUST be in YYYY-MM-DD format.
 For hotel_class, use comma-separated star ratings if mentioned (e.g., "3,4,5").
 No extra text — just the JSON.""",
         ),
@@ -54,7 +59,10 @@ def run_hotel_agent(llm, user_query: str) -> AIMessage:
     """Full hotel agent: extract params → search → return AIMessage."""
     try:
         chain = build_hotel_chain(llm)
-        params: HotelParams = chain.invoke({"query": user_query})
+        params: HotelParams = chain.invoke({
+            "query": user_query,
+            "today": date.today().isoformat(),
+        })
         result = search_hotels(
             location=params.location,
             check_in_date=params.check_in_date,

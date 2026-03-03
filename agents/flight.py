@@ -1,6 +1,7 @@
 """Flight agent — extracts structured params from user query, then searches."""
 
 import json
+from datetime import date
 from typing import Optional
 
 from langchain_core.messages import AIMessage
@@ -25,16 +26,19 @@ EXTRACTION_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             """Extract flight search parameters from the user message.
+Today's date is {today}. Use this to resolve relative dates and assume the correct year.
+If the user says "March 8" without a year, assume the nearest future March 8 from today.
+
 Return ONLY a JSON object with these fields:
 {{
   "departure_airport": "city name or IATA code",
   "arrival_airport": "city name or IATA code",
-  "outbound_date": "YYYY-MM-DD or natural language date",
+  "outbound_date": "YYYY-MM-DD",
   "return_date": "YYYY-MM-DD or null if one-way",
   "adults": 1,
   "children": 0
 }}
-No extra text — just the JSON.""",
+All dates MUST be in YYYY-MM-DD format. No extra text — just the JSON.""",
         ),
         ("human", "{query}"),
     ]
@@ -51,7 +55,10 @@ def run_flight_agent(llm, user_query: str) -> AIMessage:
     """Full flight agent: extract params → search → return AIMessage."""
     try:
         chain = build_flight_chain(llm)
-        params: FlightParams = chain.invoke({"query": user_query})
+        params: FlightParams = chain.invoke({
+            "query": user_query,
+            "today": date.today().isoformat(),
+        })
         result = search_flights(
             departure_airport=params.departure_airport,
             arrival_airport=params.arrival_airport,
