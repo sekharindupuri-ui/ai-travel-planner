@@ -14,6 +14,31 @@ from langchain_core.messages import AIMessage, HumanMessage
 from auth.login import check_password
 from agents.graph import build_graph
 
+
+def extract_text(message) -> str:
+    """Extract plain text from a message, handling various content formats."""
+    if not hasattr(message, "content"):
+        return str(message)
+
+    content = message.content
+
+    # Simple string — return as-is
+    if isinstance(content, str):
+        return content
+
+    # List of content blocks (Gemini format) — extract text parts
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block["text"])
+            elif isinstance(block, str):
+                parts.append(block)
+        return "\n".join(parts) if parts else str(content)
+
+    return str(content)
+
+
 # ---- Page config ----
 st.set_page_config(
     page_title="AI Travel Planner",
@@ -78,7 +103,7 @@ This app uses **3 specialized AI agents** coordinated by a router:
 for msg in st.session_state.messages:
     role = "user" if isinstance(msg, HumanMessage) else "assistant"
     with st.chat_message(role):
-        st.markdown(msg.content)
+        st.markdown(extract_text(msg))
 
 # ---- Chat input ----
 if prompt := st.chat_input("Where would you like to go?"):
@@ -112,24 +137,24 @@ if prompt := st.chat_input("Where would you like to go?"):
                         ai_response = m
                         break
 
-                if ai_response and ai_response.content:
-                    st.markdown(ai_response.content)
-                    st.session_state.messages.append(ai_response)
+                if ai_response:
+                    text = extract_text(ai_response)
+                    if text:
+                        st.markdown(text)
+                        # Store a clean version in session
+                        st.session_state.messages.append(AIMessage(content=text))
+                    else:
+                        st.warning("The agent returned an empty response. Please try again.")
                 else:
-                    # Debug: show what we actually got back
-                    msg_types = [type(m).__name__ for m in response_messages]
-                    st.warning(
-                        f"No response text generated. "
-                        f"Messages returned: {len(response_messages)} ({', '.join(msg_types)})"
-                    )
-                    # Try to show any content we got
-                    for m in response_messages:
-                        if hasattr(m, "content") and m.content:
-                            st.markdown(m.content)
-                            st.session_state.messages.append(
-                                AIMessage(content=m.content)
-                            )
+                    # Fallback: try to find any message with content
+                    for m in reversed(response_messages):
+                        text = extract_text(m)
+                        if text and not isinstance(m, HumanMessage):
+                            st.markdown(text)
+                            st.session_state.messages.append(AIMessage(content=text))
                             break
+                    else:
+                        st.warning("No response generated. Please try rephrasing your question.")
 
             except Exception as e:
                 st.error(f"Something went wrong: {e}")
