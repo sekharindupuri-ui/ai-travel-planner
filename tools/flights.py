@@ -8,8 +8,9 @@ from serpapi.google_search import GoogleSearch
 
 from config import SERPAPI_API_KEY
 
-# ---- Airport code mapping ----
+# ---- Airport code mapping (expanded) ----
 AIRPORT_CODES: dict[str, str] = {
+    # US cities
     "boston": "BOS",
     "san francisco": "SFO",
     "sf": "SFO",
@@ -20,6 +21,44 @@ AIRPORT_CODES: dict[str, str] = {
     "la": "LAX",
     "chicago": "ORD",
     "seattle": "SEA",
+    "miami": "MIA",
+    "atlanta": "ATL",
+    "denver": "DEN",
+    "dallas": "DFW",
+    "houston": "IAH",
+    "washington": "IAD",
+    "dc": "IAD",
+    "indianapolis": "IND",
+    "cincinnati": "CVG",
+    "detroit": "DTW",
+    "pittsburgh": "PIT",
+    "pittsburg": "PIT",
+    "philadelphia": "PHL",
+    "phoenix": "PHX",
+    "minneapolis": "MSP",
+    "st louis": "STL",
+    "saint louis": "STL",
+    "charlotte": "CLT",
+    "orlando": "MCO",
+    "tampa": "TPA",
+    "san diego": "SAN",
+    "portland": "PDX",
+    "las vegas": "LAS",
+    "vegas": "LAS",
+    "salt lake city": "SLC",
+    "nashville": "BNA",
+    "austin": "AUS",
+    "san antonio": "SAT",
+    "new orleans": "MSY",
+    "columbus": "CMH",
+    "cleveland": "CLE",
+    "milwaukee": "MKE",
+    "kansas city": "MCI",
+    "raleigh": "RDU",
+    "baltimore": "BWI",
+    "honolulu": "HNL",
+    "anchorage": "ANC",
+    # International
     "paris": "CDG",
     "london": "LHR",
     "delhi": "DEL",
@@ -29,14 +68,6 @@ AIRPORT_CODES: dict[str, str] = {
     "munich": "MUC",
     "nagpur": "NAG",
     "dubai": "DXB",
-    "indianapolis": "IND",
-    "miami": "MIA",
-    "atlanta": "ATL",
-    "denver": "DEN",
-    "dallas": "DFW",
-    "houston": "IAH",
-    "washington": "IAD",
-    "dc": "IAD",
     "toronto": "YYZ",
     "bangkok": "BKK",
     "sydney": "SYD",
@@ -47,6 +78,37 @@ AIRPORT_CODES: dict[str, str] = {
     "hong kong": "HKG",
     "mumbai": "BOM",
     "bangalore": "BLR",
+    "beijing": "PEK",
+    "shanghai": "PVG",
+    "seoul": "ICN",
+    "taipei": "TPE",
+    "istanbul": "IST",
+    "cairo": "CAI",
+    "johannesburg": "JNB",
+    "mexico city": "MEX",
+    "cancun": "CUN",
+    "sao paulo": "GRU",
+    "buenos aires": "EZE",
+    "lima": "LIM",
+    "bogota": "BOG",
+    "dublin": "DUB",
+    "lisbon": "LIS",
+    "madrid": "MAD",
+    "zurich": "ZRH",
+    "vienna": "VIE",
+    "prague": "PRG",
+    "athens": "ATH",
+    "berlin": "BER",
+    "copenhagen": "CPH",
+    "stockholm": "ARN",
+    "oslo": "OSL",
+    "helsinki": "HEL",
+    "kuala lumpur": "KUL",
+    "manila": "MNL",
+    "jakarta": "CGK",
+    "auckland": "AKL",
+    "vancouver": "YVR",
+    "montreal": "YUL",
 }
 
 
@@ -97,7 +159,7 @@ def search_flights(
     try:
         results = GoogleSearch(params).get_dict()
         if usage_tracker:
-            usage_tracker.log_serpapi("Flight", detail=f"{dep}→{arr} {out_date}")
+            usage_tracker.log_serpapi("Flight", detail=f"{dep}\u2192{arr} {out_date}")
 
         flights = results.get("best_flights") or results.get("other_flights", [])
         if not flights:
@@ -117,11 +179,11 @@ def search_flights(
             stops = len(f.get("flights", [])) - 1
             stop_label = "Direct" if stops == 0 else f"{stops} stop(s)"
             lines.append(
-                f"**{airline}** ({travel_class}) — **${price}** | {duration} min | {stop_label}\n"
-                f"  {dep_name} ({dep_time}) → {arr_name} ({arr_time})"
+                f"**{airline}** ({travel_class}) \u2014 **${price}** | {duration} min | {stop_label}\n"
+                f"  {dep_name} ({dep_time}) \u2192 {arr_name} ({arr_time})"
             )
 
-        header = f"✈️ Flights from **{dep}** to **{arr}** on {out_date}"
+        header = f"\u2708\uFE0F Flights from **{dep}** to **{arr}** on {out_date}"
         if ret_date:
             header += f" (return {ret_date})"
         return header + "\n\n" + "\n\n".join(lines)

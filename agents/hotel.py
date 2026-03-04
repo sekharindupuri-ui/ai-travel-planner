@@ -26,11 +26,13 @@ EXTRACTION_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             """Extract hotel search parameters from the conversation.
-Today's date is {today}. Use this to resolve relative dates and assume the correct year.
-If the user says "March 8" without a year, assume the nearest future March 8 from today.
 
-IMPORTANT: The user may be referring to details from earlier in the conversation.
-Use the full conversation context to fill in any missing parameters.
+CRITICAL DATE RULE: Today is {today} (year {year}). The current year is {year}.
+- If a user mentions a month/day WITHOUT a year, use {year} as the year.
+- "April 8th" means {year}-04-08. NOT 2027, NOT 2025. Always {year}.
+- Only use a future year if the date has already passed in {year}.
+
+Use the full conversation context to fill in missing parameters.
 For example, if the user previously searched for flights to Denver and now says
 "find me a hotel there", use Denver as the location and infer dates from context.
 
@@ -44,7 +46,7 @@ Return ONLY a JSON object:
   "rooms": 1,
   "hotel_class": null
 }}
-All dates MUST be in YYYY-MM-DD format.
+All dates MUST use year {year} unless the date has already passed.
 For hotel_class, use comma-separated star ratings if mentioned (e.g., "3,4,5").
 No extra text — just the JSON.""",
         ),
@@ -78,9 +80,11 @@ def run_hotel_agent(llm, user_query: str, usage_tracker=None, messages: list = N
     try:
         chain = build_hotel_chain(llm)
         query = _build_context_query(messages, user_query) if messages else user_query
+        today = date.today()
         params: HotelParams = chain.invoke({
             "query": query,
-            "today": date.today().isoformat(),
+            "today": today.isoformat(),
+            "year": str(today.year),
         })
         if usage_tracker:
             usage_tracker.log_gemini("Hotel", detail="param extraction")

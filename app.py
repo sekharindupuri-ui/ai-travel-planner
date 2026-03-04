@@ -13,7 +13,7 @@ import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
 
 from auth.login import check_password
-from agents.graph import build_graph
+from agents.graph import build_graph, set_tracker
 from usage import UsageTracker
 
 
@@ -146,12 +146,13 @@ if prompt := st.chat_input("Where would you like to go?"):
     with st.chat_message("assistant"):
         with st.spinner("Thinking…"):
             try:
-                # Pass full conversation history so agents have context
+                # Set the tracker via module-level ref (avoids serialization)
+                set_tracker(tracker)
+
                 result = graph.invoke(
                     {
                         "messages": list(st.session_state.messages),
                         "next_agent": None,
-                        "usage_tracker": tracker,
                     },
                     config={
                         "configurable": {

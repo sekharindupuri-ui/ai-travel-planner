@@ -33,10 +33,25 @@ def get_llm():
     )
 
 
+# ---- Shared tracker reference (set by app.py before each invoke) ----
+_current_tracker = None
+
+
+def set_tracker(tracker):
+    """Called by app.py to set the tracker before graph.invoke()."""
+    global _current_tracker
+    _current_tracker = tracker
+
+
+def get_tracker():
+    """Get the current tracker without relying on state serialization."""
+    return _current_tracker
+
+
 def router_node(state: TravelState) -> dict:
     llm = get_llm()
     user_msg = state["messages"][-1].content
-    tracker = state.get("usage_tracker")
+    tracker = get_tracker()
     chain = build_router_chain(llm)
     try:
         decision = chain.invoke({"query": user_msg})
@@ -52,7 +67,7 @@ def router_node(state: TravelState) -> dict:
 def flight_node(state: TravelState) -> dict:
     llm = get_llm()
     user_query = state["messages"][-1].content
-    tracker = state.get("usage_tracker")
+    tracker = get_tracker()
     all_messages = state.get("messages", [])
     response = run_flight_agent(llm, user_query, usage_tracker=tracker, messages=all_messages)
     return {"messages": [response]}
@@ -61,7 +76,7 @@ def flight_node(state: TravelState) -> dict:
 def hotel_node(state: TravelState) -> dict:
     llm = get_llm()
     user_query = state["messages"][-1].content
-    tracker = state.get("usage_tracker")
+    tracker = get_tracker()
     all_messages = state.get("messages", [])
     response = run_hotel_agent(llm, user_query, usage_tracker=tracker, messages=all_messages)
     return {"messages": [response]}
@@ -69,7 +84,7 @@ def hotel_node(state: TravelState) -> dict:
 
 def itinerary_node(state: TravelState) -> dict:
     llm = get_llm()
-    tracker = state.get("usage_tracker")
+    tracker = get_tracker()
     response = run_itinerary_agent(llm, state["messages"], usage_tracker=tracker)
     return {"messages": [response]}
 

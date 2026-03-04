@@ -25,16 +25,18 @@ EXTRACTION_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             """Extract flight search parameters from the conversation.
-Today's date is {today}. Use this to resolve relative dates and assume the correct year.
-If the user says "March 8" without a year, assume the nearest future March 8 from today.
 
-IMPORTANT: The user may be referring to details from earlier in the conversation.
-Use the full conversation context to fill in any missing parameters.
-For example, if the user previously searched for "Chicago to Denver" and now says
-"how about returning on April 8th instead", use Chicago, Denver, and the original
-outbound date from the earlier message.
+CRITICAL DATE RULE: Today is {today} (year {year}). The current year is {year}.
+- If a user mentions a month/day WITHOUT a year, use {year} as the year.
+- "April 8th" means {year}-04-08. NOT 2027, NOT 2025. Always {year}.
+- Only use a future year if the date has already passed in {year}.
 
-Return ONLY a JSON object with these fields:
+Use the full conversation context to fill in missing parameters.
+For example, if the user previously searched "Chicago to Denver" and now says
+"how about returning on April 8th instead", reuse Chicago, Denver, and the
+original outbound date.
+
+Return ONLY a JSON object:
 {{
   "departure_airport": "city name or IATA code",
   "arrival_airport": "city name or IATA code",
@@ -43,7 +45,7 @@ Return ONLY a JSON object with these fields:
   "adults": 1,
   "children": 0
 }}
-All dates MUST be in YYYY-MM-DD format. No extra text — just the JSON.""",
+All dates MUST use year {year} unless the date has already passed. No extra text.""",
         ),
         ("human", "{query}"),
     ]
@@ -58,16 +60,15 @@ def build_flight_chain(llm):
 def _build_context_query(messages: list, current_query: str) -> str:
     """Build a context-rich query from conversation history."""
     history_lines = []
-    for msg in messages[:-1]:  # exclude the current message
+    for msg in messages[:-1]:
         if isinstance(msg, HumanMessage):
             history_lines.append(f"User: {msg.content}")
         elif isinstance(msg, AIMessage):
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
-            # Keep only the first 200 chars of AI responses to save tokens
             history_lines.append(f"Assistant: {content[:200]}")
 
     if history_lines:
-        history = "\n".join(history_lines[-6:])  # last 3 exchanges max
+        history = "\n".join(history_lines[-6:])
         return f"Previous conversation:\n{history}\n\nCurrent request: {current_query}"
     return current_query
 
@@ -76,9 +77,11 @@ def run_flight_agent(llm, user_query: str, usage_tracker=None, messages: list = 
     try:
         chain = build_flight_chain(llm)
         query = _build_context_query(messages, user_query) if messages else user_query
+        today = date.today()
         params: FlightParams = chain.invoke({
             "query": query,
-            "today": date.today().isoformat(),
+            "today": today.isoformat(),
+            "year": str(today.year),
         })
         if usage_tracker:
             usage_tracker.log_gemini("Flight", detail="param extraction")
