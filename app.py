@@ -150,6 +150,7 @@ if prompt := st.chat_input("Where would you like to go?"):
                     {
                         "messages": [user_msg],
                         "next_agent": None,
+                        "usage_tracker": tracker,
                     },
                     config={
                         "configurable": {

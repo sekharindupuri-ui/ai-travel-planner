@@ -1,7 +1,7 @@
 """LangGraph orchestration — wires together the router and all agents."""
 
 import os
-from typing import Annotated, List, Literal, Optional, TypedDict
+from typing import Annotated, Any, List, Literal, Optional, TypedDict
 
 import operator
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -23,6 +23,7 @@ os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 class TravelState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     next_agent: Optional[str]
+    usage_tracker: Optional[Any]
 
 
 def get_llm():
@@ -35,10 +36,13 @@ def get_llm():
 def router_node(state: TravelState) -> dict:
     llm = get_llm()
     user_msg = state["messages"][-1].content
+    tracker = state.get("usage_tracker")
     chain = build_router_chain(llm)
     try:
         decision = chain.invoke({"query": user_msg})
         next_agent = resolve_route(decision)
+        if tracker:
+            tracker.log_gemini("Router", detail="query classification")
     except Exception as e:
         print(f"Router error: {e}")
         next_agent = "itinerary_agent"
@@ -48,40 +52,24 @@ def router_node(state: TravelState) -> dict:
 def flight_node(state: TravelState) -> dict:
     llm = get_llm()
     user_query = state["messages"][-1].content
-    # Get usage tracker from Streamlit session state
-    usage_tracker = _get_usage_tracker()
-    if usage_tracker:
-        usage_tracker.log_gemini("Router", detail="query classification")
-    response = run_flight_agent(llm, user_query, usage_tracker=usage_tracker)
+    tracker = state.get("usage_tracker")
+    response = run_flight_agent(llm, user_query, usage_tracker=tracker)
     return {"messages": [response]}
 
 
 def hotel_node(state: TravelState) -> dict:
     llm = get_llm()
     user_query = state["messages"][-1].content
-    usage_tracker = _get_usage_tracker()
-    if usage_tracker:
-        usage_tracker.log_gemini("Router", detail="query classification")
-    response = run_hotel_agent(llm, user_query, usage_tracker=usage_tracker)
+    tracker = state.get("usage_tracker")
+    response = run_hotel_agent(llm, user_query, usage_tracker=tracker)
     return {"messages": [response]}
 
 
 def itinerary_node(state: TravelState) -> dict:
     llm = get_llm()
-    usage_tracker = _get_usage_tracker()
-    if usage_tracker:
-        usage_tracker.log_gemini("Router", detail="query classification")
-    response = run_itinerary_agent(llm, state["messages"], usage_tracker=usage_tracker)
+    tracker = state.get("usage_tracker")
+    response = run_itinerary_agent(llm, state["messages"], usage_tracker=tracker)
     return {"messages": [response]}
-
-
-def _get_usage_tracker():
-    """Safely get usage tracker from Streamlit session state."""
-    try:
-        import streamlit as st
-        return st.session_state.get("usage_tracker")
-    except Exception:
-        return None
 
 
 def pick_agent(state: TravelState) -> Literal["flight_agent", "hotel_agent", "itinerary_agent"]:
