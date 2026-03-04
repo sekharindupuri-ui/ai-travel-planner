@@ -53,7 +53,8 @@ def flight_node(state: TravelState) -> dict:
     llm = get_llm()
     user_query = state["messages"][-1].content
     tracker = state.get("usage_tracker")
-    response = run_flight_agent(llm, user_query, usage_tracker=tracker)
+    all_messages = state.get("messages", [])
+    response = run_flight_agent(llm, user_query, usage_tracker=tracker, messages=all_messages)
     return {"messages": [response]}
 
 
@@ -61,7 +62,8 @@ def hotel_node(state: TravelState) -> dict:
     llm = get_llm()
     user_query = state["messages"][-1].content
     tracker = state.get("usage_tracker")
-    response = run_hotel_agent(llm, user_query, usage_tracker=tracker)
+    all_messages = state.get("messages", [])
+    response = run_hotel_agent(llm, user_query, usage_tracker=tracker, messages=all_messages)
     return {"messages": [response]}
 
 

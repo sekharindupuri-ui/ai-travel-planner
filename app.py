@@ -146,9 +146,10 @@ if prompt := st.chat_input("Where would you like to go?"):
     with st.chat_message("assistant"):
         with st.spinner("Thinking…"):
             try:
+                # Pass full conversation history so agents have context
                 result = graph.invoke(
                     {
-                        "messages": [user_msg],
+                        "messages": list(st.session_state.messages),
                         "next_agent": None,
                         "usage_tracker": tracker,
                     },
